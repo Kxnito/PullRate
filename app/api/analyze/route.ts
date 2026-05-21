@@ -8,7 +8,7 @@ export async function POST(request: NextRequest) {
 
   // TODO: Parse restock payload from request body
   // TODO: Call lib/ebay.ts fetchMarketPrice for live market data
-  // TODO: Call lib/rocketride.ts analyzeRestock to get AI recommendation
+  // TODO: Call lib/langchain.ts analyzeRestock to get AI recommendation
   // TODO: Save drop to Firestore via lib/firebase.ts
   // TODO: Send Discord alert via lib/discord.ts sendDropAlert
 
