@@ -46,3 +46,10 @@ export interface Settings {
   radiusMiles: number;
   alertType: 'online' | 'in-store' | 'both';
 }
+
+export interface AnalysisResult {
+  recommendation: 'Buy Now' | 'Buy if Convenient' | 'Skip';
+  demandSummary: string;
+  urgency: string;
+  alertMessage: string;
+}
