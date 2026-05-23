@@ -6,25 +6,46 @@ const PRODUCTS = [
   { name: 'Ascended Heroes Booster Bundle', tcin: '95120834', retailPrice: 19.99 },
 ]
 
+const TEST_MODE = process.argv.includes('--test')
+if (TEST_MODE) console.log('[agent] Running in TEST MODE')
+
 // { [tcin]: { online: boolean } }
 const lastKnownStock = {}
 
-const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+const TARGET_HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  'Accept': 'application/json',
+  'Accept-Language': 'en-US,en;q=0.9',
+  'Origin': 'https://www.target.com',
+  'Referer': 'https://www.target.com/',
+}
 
 function ts() {
   return new Date().toISOString()
 }
 
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
 async function fetchTargetOnline(tcin) {
-  const url = new URL('https://redsky.target.com/redsky_aggregations/v1/web/pdp_client_v1')
-  url.searchParams.set('tcin', tcin)
-  url.searchParams.set('pricing_store_id', '3991')
+  const url = new URL('https://redsky.target.com/redsky_aggregations/v1/web/product_summary_with_fulfillment_v1')
+  url.searchParams.set('key', '9f36aeafbe60771e321a7cc95a78140772ab3e96')
+  url.searchParams.set('tcins', tcin)
+  url.searchParams.set('zip', '92843')
+  url.searchParams.set('state', 'CA')
+  url.searchParams.set('latitude', '33.77')
+  url.searchParams.set('longitude', '-117.94')
+  url.searchParams.set('has_required_store_id', 'false')
+  url.searchParams.set('skip_price_promo', 'true')
   url.searchParams.set('visitor_id', 'pullrate')
   url.searchParams.set('channel', 'WEB')
   url.searchParams.set('page', `/p/A-${tcin}`)
 
+  await sleep(Math.floor(Math.random() * 2000) + 1000)
+
   const res = await fetch(url.toString(), {
-    headers: { 'User-Agent': USER_AGENT },
+    headers: TARGET_HEADERS,
   })
 
   if (res.status === 403 || res.status === 429) {
@@ -37,14 +58,20 @@ async function fetchTargetOnline(tcin) {
   }
 
   const data = await res.json()
-  const network = data?.data?.product?.available_to_promise_network
-  if (!network) {
-    throw new Error(`Missing availability data in Target response for TCIN ${tcin}`)
+  console.log('Target raw response:', JSON.stringify(data).substring(0, 2000))
+
+  const product = data?.data?.product_summaries?.[0]
+  const fulfillment = product?.fulfillment
+  console.log('fulfillment path:', JSON.stringify(fulfillment))
+
+  if (!fulfillment) {
+    throw new Error(`Missing fulfillment data in Target response for TCIN ${tcin}`)
   }
 
   return {
-    inStock: network.availability === 'IN_STOCK',
-    qty: Number(network.available_to_promise_quantity ?? 0),
+    inStock: fulfillment.availability_status === 'IN_STOCK',
+    qty: Number(fulfillment.available_to_promise_quantity ?? 0),
+    price: Number(product?.price?.current_retail ?? 0),
   }
 }
 
@@ -84,6 +111,20 @@ async function notifyRestock(product, qty) {
 }
 
 async function poll() {
+  if (TEST_MODE) {
+    console.log(`[${ts()}] [test] Sending fake restock event to analyze endpoint...`)
+    try {
+      await notifyRestock(
+        { name: 'Prismatic Evolutions ETB', tcin: '1011206804', retailPrice: 49.99 },
+        3
+      )
+    } catch (err) {
+      console.error(`[${ts()}] [test] notifyRestock failed:`, err.message)
+    }
+    clearInterval(pollInterval)
+    return
+  }
+
   for (const product of PRODUCTS) {
     try {
       const current = await fetchTargetOnline(product.tcin)
@@ -111,10 +152,12 @@ async function poll() {
     } catch (err) {
       console.error(`[${ts()}] [agent] Error polling ${product.name}:`, err.message)
     }
+
+    await sleep(3000)
   }
 }
 
 const INTERVAL = parseInt(process.env.POLL_INTERVAL_MS || '10000', 10)
-setInterval(poll, INTERVAL)
+const pollInterval = setInterval(poll, INTERVAL)
 poll()
 console.log(`[${ts()}] PullRate agent started — polling every ${INTERVAL / 1000}s`)

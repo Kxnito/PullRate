@@ -1,5 +1,13 @@
-const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36';
+const ONLINE_KEY = '9f36aeafbe60771e321a7cc95a78140772ab3e96';
 const STORE_KEY = 'ff457966e64d5e877fdbad070f276d18ecec4a01';
+
+const TARGET_HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  'Accept': 'application/json',
+  'Accept-Language': 'en-US,en;q=0.9',
+  'Origin': 'https://www.target.com',
+  'Referer': 'https://www.target.com/',
+};
 
 type StoreResult = {
   storeId: string;
@@ -19,15 +27,21 @@ export type TargetInventory = {
 };
 
 async function fetchOnlineInventory(tcin: string): Promise<{ online: boolean; onlineQty: number; price: number }> {
-  const url = new URL('https://redsky.target.com/redsky_aggregations/v1/web/pdp_client_v1');
-  url.searchParams.set('tcin', tcin);
-  url.searchParams.set('pricing_store_id', '3991');
+  const url = new URL('https://redsky.target.com/redsky_aggregations/v1/web/product_summary_with_fulfillment_v1');
+  url.searchParams.set('key', ONLINE_KEY);
+  url.searchParams.set('tcins', tcin);
+  url.searchParams.set('zip', '92843');
+  url.searchParams.set('state', 'CA');
+  url.searchParams.set('latitude', '33.77');
+  url.searchParams.set('longitude', '-117.94');
+  url.searchParams.set('has_required_store_id', 'false');
+  url.searchParams.set('skip_price_promo', 'true');
   url.searchParams.set('visitor_id', 'pullrate');
   url.searchParams.set('channel', 'WEB');
   url.searchParams.set('page', `/p/A-${tcin}`);
 
   const res = await fetch(url.toString(), {
-    headers: { 'User-Agent': USER_AGENT },
+    headers: TARGET_HEADERS,
   });
 
   if (!res.ok) {
@@ -35,17 +49,17 @@ async function fetchOnlineInventory(tcin: string): Promise<{ online: boolean; on
   }
 
   const data = await res.json();
-  const network = data?.data?.product?.available_to_promise_network;
-  const price = data?.data?.product?.price?.current_retail;
+  const product = data?.data?.product_summaries?.[0];
+  const fulfillment = product?.fulfillment;
 
-  if (!network) {
-    throw new Error(`Unexpected Target API response for TCIN ${tcin}: missing availability data`);
+  if (!fulfillment) {
+    throw new Error(`Unexpected Target API response for TCIN ${tcin}: missing fulfillment data`);
   }
 
   return {
-    online: network.availability === 'IN_STOCK',
-    onlineQty: Number(network.available_to_promise_quantity ?? 0),
-    price: Number(price ?? 0),
+    online: fulfillment.availability_status === 'IN_STOCK',
+    onlineQty: Number(fulfillment.available_to_promise_quantity ?? 0),
+    price: Number(product?.price?.current_retail ?? 0),
   };
 }
 
