@@ -73,7 +73,7 @@ async function fetchNearbyStores(): Promise<{ storeId: string; storeName: string
   url.searchParams.set('key', STORE_KEY);
 
   const res = await fetch(url.toString(), {
-    headers: { 'User-Agent': USER_AGENT },
+    headers: TARGET_HEADERS,
   });
 
   if (!res.ok) {
@@ -103,7 +103,7 @@ async function fetchStoreStock(storeId: string, tcin: string): Promise<{ inStock
   url.searchParams.set('key', STORE_KEY);
 
   const res = await fetch(url.toString(), {
-    headers: { 'User-Agent': USER_AGENT },
+    headers: TARGET_HEADERS,
   });
 
   if (!res.ok) {
